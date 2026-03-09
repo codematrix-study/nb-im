@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NB-IM 监控仪表板</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .status-bar {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .status-item {
+            text-align: center;
+            padding: 15px;
+            border-radius: 8px;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .status-label {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .status-value {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .status-value.health-up {
+            color: #10b981;
+        }
+
+        .status-value.health-down {
+            color: #ef4444;
+        }
+
+        .status-value.health-degraded {
+            color: #f59e0b;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .card h2 {
+            font-size: 1.3em;
+            margin-bottom: 15px;
+            color: #333;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .metric-row:last-child {
+            border-bottom: none;
+        }
+
+        .metric-name {
+            color: #666;
+            font-size: 0.95em;
+        }
+
+        .metric-value {
+            font-weight: bold;
+            color: #333;
+        }
+
+        .alert-item {
+            padding: 12px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            border-left: 4px solid;
+        }
+
+        .alert-critical {
+            background: #fee;
+            border-color: #ef4444;
+        }
+
+        .alert-warning {
+            background: #fef3c7;
+            border-color: #f59e0b;
+        }
+
+        .alert-info {
+            background: #dbeafe;
+            border-color: #3b82f6;
+        }
+
+        .alert-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .alert-description {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .refresh-button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1em;
+            margin-bottom: 20px;
+        }
+
+        .refresh-button:hover {
+            background: #5568d3;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: white;
+            font-size: 1.2em;
+        }
+
+        .error {
+            background: #fee;
+            color: #c00;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .timestamp {
+            text-align: center;
+            color: white;
+            margin-top: 20px;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 NB-IM 监控仪表板</h1>
+            <p>实时监控即时通讯中间件运行状态</p>
+        </div>
+
+        <button class="refresh-button" onclick="loadDashboard()">🔄 刷新数据</button>
+
+        <div id="error-container"></div>
+
+        <div id="loading" class="loading">正在加载数据...</div>
+
+        <div id="dashboard" style="display: none;">
+            <!-- 系统状态 -->
+            <div class="status-bar">
+                <div class="status-grid">
+                    <div class="status-item">
+                        <div class="status-label">系统状态</div>
+                        <div class="status-value" id="health-status">--</div>
+                    </div>
+                    <div class="status-item">
+                        <div class="status-label">在线连接</div>
+                        <div class="status-value" id="connections">--</div>
+                    </div>
+                    <div class="status-item">
+                        <div class="status-label">在线用户</div>
+                        <div class="status-value" id="online-users">--</div>
+                    </div>
+                    <div class="status-item">
+                        <div class="status-label">活跃告警</div>
+                        <div class="status-value" id="active-alerts">--</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 性能指标 -->
+            <div class="dashboard-grid">
+                <div class="card">
+                    <h2>📊 性能指标</h2>
+                    <div id="performance-metrics"></div>
+                </div>
+
+                <div class="card">
+                    <h2>✅ 健康检查</h2>
+                    <div id="health-checks"></div>
+                </div>
+
+                <div class="card">
+                    <h2>⚠️ 活跃告警</h2>
+                    <div id="alerts"></div>
+                </div>
+
+                <div class="card">
+                    <h2>🔧 系统指标</h2>
+                    <div id="system-metrics"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="timestamp">
+            最后更新: <span id="timestamp">--</span>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.protocol + '//' + window.location.hostname + ':8081';
+
+        async function fetchJSON(endpoint) {
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                console.error(`Fetch error for ${endpoint}:`, error);
+                throw error;
+            }
+        }
+
+        function updateHealthStatus(overview) {
+            const healthStatus = document.getElementById('health-status');
+            const status = overview.health?.status || 'UNKNOWN';
+            healthStatus.textContent = status;
+            healthStatus.className = 'status-value health-' + status.toLowerCase();
+        }
+
+        function updateConnections(overview) {
+            const connections = document.getElementById('connections');
+            const count = overview.connections?.current || 0;
+            connections.textContent = count;
+        }
+
+        function updateOnlineUsers(overview) {
+            const onlineUsers = document.getElementById('online-users');
+            const count = overview.connections?.onlineUsers || 0;
+            onlineUsers.textContent = count;
+        }
+
+        function updateActiveAlerts(overview) {
+            const activeAlerts = document.getElementById('active-alerts');
+            const count = overview.activeAlerts || 0;
+            activeAlerts.textContent = count;
+        }
+
+        function renderPerformanceMetrics(performance) {
+            const container = document.getElementById('performance-metrics');
+            if (!performance || Object.keys(performance).length === 0) {
+                container.innerHTML = '<div class="metric-row"><span class="metric-name">暂无数据</span></div>';
+                return;
+            }
+
+            let html = '';
+            for (const [type, metrics] of Object.entries(performance)) {
+                html += `
+                    <div class="metric-row">
+                        <span class="metric-name">${type} 吞吐量</span>
+                        <span class="metric-value">${metrics.throughput.toFixed(2)} req/s</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-name">${type} 平均延迟</span>
+                        <span class="metric-value">${metrics.avgLatency.toFixed(2)} ms</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-name">${type} P99延迟</span>
+                        <span class="metric-value">${metrics.p99Latency} ms</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-name">${type} 错误率</span>
+                        <span class="metric-value">${metrics.errorRate.toFixed(2)}%</span>
+                    </div>
+                `;
+            }
+            container.innerHTML = html;
+        }
+
+        function renderHealthChecks(health) {
+            const container = document.getElementById('health-checks');
+            if (!health.checks || health.checks.length === 0) {
+                container.innerHTML = '<div class="metric-row"><span class="metric-name">暂无数据</span></div>';
+                return;
+            }
+
+            let html = '';
+            for (const check of health.checks) {
+                const statusClass = check.status === 'UP' ? 'health-up' :
+                                   check.status === 'DOWN' ? 'health-down' : 'health-degraded';
+                html += `
+                    <div class="metric-row">
+                        <span class="metric-name">${check.name}</span>
+                        <span class="metric-value ${statusClass}">${check.status}</span>
+                    </div>
+                `;
+            }
+            container.innerHTML = html;
+        }
+
+        function renderAlerts(alerts) {
+            const container = document.getElementById('alerts');
+            if (!alerts || alerts.length === 0) {
+                container.innerHTML = '<div class="metric-row"><span class="metric-name">无活跃告警</span></div>';
+                return;
+            }
+
+            let html = '';
+            for (const alert of alerts) {
+                const alertClass = alert.level === 'CRITICAL' ? 'alert-critical' :
+                                  alert.level === 'WARNING' ? 'alert-warning' : 'alert-info';
+                html += `
+                    <div class="alert-item ${alertClass}">
+                        <div class="alert-title">${alert.title} (${alert.level})</div>
+                        <div class="alert-description">${alert.description}</div>
+                    </div>
+                `;
+            }
+            container.innerHTML = html;
+        }
+
+        function renderSystemMetrics(metrics) {
+            const container = document.getElementById('system-metrics');
+            if (!metrics) {
+                container.innerHTML = '<div class="metric-row"><span class="metric-name">暂无数据</span></div>';
+                return;
+            }
+
+            const jvm = metrics.jvm || {};
+            let html = `
+                <div class="metric-row">
+                    <span class="metric-name">堆内存使用</span>
+                    <span class="metric-value">${(jvm.jvm_memory_heap_used / 1024 / 1024).toFixed(2)} MB</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-name">堆内存使用率</span>
+                    <span class="metric-value">${jvm.jvm_memory_heap_usage_percent?.toFixed(2) || 0}%</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-name">线程数</span>
+                    <span class="metric-value">${jvm.jvm_threads_count || 0}</span>
+                </div>
+            `;
+
+            const redis = metrics.redis || {};
+            html += `
+                <div class="metric-row">
+                    <span class="metric-name">Redis状态</span>
+                    <span class="metric-value">${redis.redis_status || 'UNKNOWN'}</span>
+                </div>
+            `;
+
+            const netty = metrics.netty || {};
+            html += `
+                <div class="metric-row">
+                    <span class="metric-name">Netty状态</span>
+                    <span class="metric-value">${netty.netty_gateway_status || 'UNKNOWN'}</span>
+                </div>
+            `;
+
+            container.innerHTML = html;
+        }
+
+        async function loadDashboard() {
+            const loading = document.getElementById('loading');
+            const dashboard = document.getElementById('dashboard');
+            const errorContainer = document.getElementById('error-container');
+
+            loading.style.display = 'block';
+            dashboard.style.display = 'none';
+            errorContainer.innerHTML = '';
+
+            try {
+                // 并行加载所有数据
+                const [overview, metrics] = await Promise.all([
+                    fetchJSON('/overview'),
+                    fetchJSON('/metrics')
+                ]);
+
+                // 更新UI
+                updateHealthStatus(overview);
+                updateConnections(overview);
+                updateOnlineUsers(overview);
+                updateActiveAlerts(overview);
+                renderPerformanceMetrics(overview.performance);
+                renderHealthChecks(overview.health);
+                renderAlerts(await fetchJSON('/alerts'));
+                renderSystemMetrics(metrics);
+
+                // 更新时间戳
+                document.getElementById('timestamp').textContent =
+                    new Date().toLocaleString('zh-CN');
+
+                // 显示仪表板
+                loading.style.display = 'none';
+                dashboard.style.display = 'block';
+
+            } catch (error) {
+                console.error('Failed to load dashboard:', error);
+                loading.style.display = 'none';
+                errorContainer.innerHTML = `
+                    <div class="error">
+                        ❌ 加载失败: ${error.message}<br>
+                        请确保管理API服务器正在运行（端口8081）
+                    </div>
+                `;
+            }
+        }
+
+        // 页面加载时自动加载数据
+        window.onload = loadDashboard;
+
+        // 每30秒自动刷新
+        setInterval(loadDashboard, 30000);
+    </script>
+</body>
+</html>

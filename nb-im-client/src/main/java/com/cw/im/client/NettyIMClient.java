@@ -2,6 +2,8 @@ package com.cw.im.client;
 
 import com.cw.im.common.codec.IMMessageDecoder;
 import com.cw.im.common.codec.IMMessageEncoder;
+import com.cw.im.common.model.MessageBody;
+import com.cw.im.common.model.MessageHeader;
 import com.cw.im.common.protocol.CommandType;
 import com.cw.im.common.protocol.IMMessage;
 import io.netty.bootstrap.Bootstrap;
@@ -164,27 +166,48 @@ public class NettyIMClient {
                 int cmdCode = Integer.parseInt(parts[0]);
                 CommandType commandType = CommandType.fromCode(cmdCode);
 
-                IMMessage message = IMMessage.builder()
+                // 构建消息
+                MessageHeader.MessageHeaderBuilder headerBuilder = MessageHeader.builder()
                     .msgId(java.util.UUID.randomUUID().toString())
                     .cmd(commandType)
                     .from(myUserId)
-                    .timestamp(System.currentTimeMillis())
-                    .payload(parts[parts.length - 1]) // 最后一个部分是消息内容
-                    .build();
+                    .timestamp(System.currentTimeMillis());
+
+                MessageBody.MessageBodyBuilder bodyBuilder = MessageBody.builder()
+                    .contentType("text/plain");
+
+                // 根据命令类型设置接收者和内容
+                Long toUserId = null;
+                String content = "";
 
                 switch (commandType) {
                     case PRIVATE_CHAT:
-                        message.setTo(Long.parseLong(parts[1]));
+                        toUserId = Long.parseLong(parts[1]);
+                        content = parts.length >= 3 ? parts[2] : "";
+                        headerBuilder.to(toUserId);
                         break;
                     case GROUP_CHAT:
-                        message.setTo(Long.parseLong(parts[1]));
+                        toUserId = Long.parseLong(parts[1]);
+                        content = parts.length >= 3 ? parts[2] : "";
+                        headerBuilder.to(toUserId);
                         break;
                     case PUBLIC_CHAT:
-                        // 公屏消息不需要 to 字段
+                        content = parts[1];
+                        headerBuilder.to(0L);
                         break;
                     default:
+                        content = parts[parts.length - 1];
+                        headerBuilder.to(0L);
                         break;
                 }
+
+                bodyBuilder.content(content);
+
+                // 构建完整消息
+                IMMessage message = IMMessage.builder()
+                    .header(headerBuilder.build())
+                    .body(bodyBuilder.build())
+                    .build();
 
                 sendMessage(message);
 
@@ -205,7 +228,7 @@ public class NettyIMClient {
         Thread connectThread = new Thread(() -> {
             client.connect(message -> {
                 // 收到消息时的回调
-                System.out.println("\n收到消息: " + message.getPayload());
+                System.out.println("\n收到消息: " + message.getContent());
                 System.out.print("> ");
             });
         });

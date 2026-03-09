@@ -1,5 +1,7 @@
 package com.cw.im.client;
 
+import com.cw.im.common.model.MessageBody;
+import com.cw.im.common.model.MessageHeader;
 import com.cw.im.common.protocol.CommandType;
 import com.cw.im.common.protocol.IMMessage;
 import io.netty.channel.ChannelHandlerContext;
@@ -29,8 +31,8 @@ public class IMClientHandler extends SimpleChannelInboundHandler<IMMessage> {
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, IMMessage msg) {
-        log.info("收到消息: cmd={}, from={}, to={}, payload={}",
-            msg.getCmd(), msg.getFrom(), msg.getTo(), msg.getPayload());
+        log.info("收到消息: cmd={}, from={}, to={}, content={}",
+            msg.getCmd(), msg.getFrom(), msg.getTo(), msg.getContent());
 
         // 调用回调
         if (callback != null) {
@@ -71,10 +73,17 @@ public class IMClientHandler extends SimpleChannelInboundHandler<IMMessage> {
      */
     private void sendAuth(ChannelHandlerContext ctx) {
         IMMessage authMsg = IMMessage.builder()
-            .msgId(java.util.UUID.randomUUID().toString())
-            .cmd(CommandType.SYSTEM_NOTICE)
-            .timestamp(System.currentTimeMillis())
-            .payload("{\"type\":\"auth\",\"token\":\"your-token\"}")
+            .header(MessageHeader.builder()
+                .msgId(java.util.UUID.randomUUID().toString())
+                .cmd(CommandType.SYSTEM_NOTICE)
+                .from(0L)
+                .to(0L)
+                .timestamp(System.currentTimeMillis())
+                .build())
+            .body(MessageBody.builder()
+                .content("{\"type\":\"auth\",\"token\":\"your-token\"}")
+                .contentType("application/json")
+                .build())
             .build();
 
         ctx.writeAndFlush(authMsg);
@@ -86,9 +95,17 @@ public class IMClientHandler extends SimpleChannelInboundHandler<IMMessage> {
      */
     private void sendHeartbeat(ChannelHandlerContext ctx) {
         IMMessage heartbeat = IMMessage.builder()
-            .msgId(java.util.UUID.randomUUID().toString())
-            .cmd(CommandType.HEARTBEAT)
-            .timestamp(System.currentTimeMillis())
+            .header(MessageHeader.builder()
+                .msgId(java.util.UUID.randomUUID().toString())
+                .cmd(CommandType.HEARTBEAT)
+                .from(0L)
+                .to(0L)
+                .timestamp(System.currentTimeMillis())
+                .build())
+            .body(MessageBody.builder()
+                .content("ping")
+                .contentType("text/plain")
+                .build())
             .build();
 
         ctx.writeAndFlush(heartbeat);

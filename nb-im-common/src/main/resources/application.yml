@@ -1,0 +1,140 @@
+# NB-IM 配置文件示例
+#
+# 开发环境配置
+# 使用方法: 复制此文件并重命名为 application-xxx.yml
+
+server:
+  port: 8080
+
+# Netty 配置
+netty:
+  # 服务端口
+  port: 9090
+  # Boss线程数（建议1）
+  boss-threads: 1
+  # Worker线程数（0表示默认 CPU * 2）
+  worker-threads: 0
+  # TCP连接队列大小
+  so-backlog: 128
+  # TCP接收缓冲区大小（字节）
+  so-rcvbuf: 32768
+  # TCP发送缓冲区大小（字节）
+  so-sndbuf: 32768
+  # 是否启用TCP_NODELAY
+  tcp-nodelay: true
+  # 单个用户最大连接数
+  max-connections-per-user: 10
+  # 网关最大连接数
+  max-connections: 100000
+
+# Redis 配置
+redis:
+  # 单机模式
+  host: localhost
+  port: 6379
+  password: ""
+  database: 0
+  # 连接超时（毫秒）
+  timeout: 3000
+  # 连接池配置
+  lettuce:
+    pool:
+      # 最大连接数
+      max-active: 20
+      # 最大空闲连接数
+      max-idle: 10
+      # 最小空闲连接数
+      min-idle: 5
+      # 连接等待超时（毫秒）
+      max-wait: 3000
+  # 集群模式（可选，取消注释使用）
+  # cluster:
+  #   nodes:
+  #     - localhost:6379
+  #     - localhost:6380
+  #     - localhost:6381
+  #   max-redirects: 3
+
+# Kafka 配置
+kafka:
+  # Kafka集群地址
+  bootstrap-servers: localhost:9092
+  # Producer 配置
+  producer:
+    # Key序列化器
+    key-serializer: org.apache.kafka.common.serialization.StringSerializer
+    # Value序列化器
+    value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    # ACK级别（0, 1, all/-1）
+    acks: 1
+    # 重试次数
+    retries: 3
+    # 批量发送大小（字节）
+    batch-size: 16384
+    # 批量发送延迟时间（毫秒）
+    linger-ms: 10
+    # 缓冲区大小（字节）
+    buffer-memory: 33554432
+    # 是否启用幂等性
+    enable-idempotence: true
+    # 压缩类型（none, gzip, snappy, lz4, zstd）
+    compression-type: lz4
+  # Consumer 配置
+  consumer:
+    # Key反序列化器
+    key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    # Value反序列化器
+    value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    # 消费者组ID
+    group-id: im-gateway-group
+    # 自动提交offset（false表示手动提交）
+    enable-auto-commit: false
+    # 当没有初始offset时的策略（earliest, latest, none）
+    auto-offset-reset: latest
+    # 单次拉取最大条数
+    max-poll-records: 100
+    # 拉取间隔（毫秒）
+    fetch-min-bytes: 1024
+    # 会话超时（毫秒）
+    session-timeout-ms: 30000
+    # 心跳间隔（毫秒）
+    heartbeat-interval-ms: 10000
+  # 监听器配置
+  listener:
+    # 消费者线程数
+    concurrency: 4
+    # 消费主题
+    topics:
+      push: im-msg-push
+      ack: im-ack
+
+# 日志配置
+logging:
+  level:
+    root: INFO
+    com.cw.im: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/nb-im.log
+    max-size: 100MB
+    max-history: 30
+    total-size-cap: 10GB
+
+# 应用配置
+app:
+  # 网关ID（可选，默认自动生成）
+  gateway-id: gateway-1
+  # 环境配置（dev, test, prod）
+  env: dev
+  # 心跳间隔（秒）
+  heartbeat-interval: 30
+  # 心跳超时（秒）
+  heartbeat-timeout: 60
+  # 消息ACK超时（秒）
+  message-ack-timeout: 30
+  # 消息重试次数
+  message-retry-times: 3
+  # 离线消息保存天数
+  offline-message-retention-days: 7

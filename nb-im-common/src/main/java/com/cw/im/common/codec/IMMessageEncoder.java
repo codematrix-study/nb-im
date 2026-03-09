@@ -1,11 +1,11 @@
 package com.cw.im.common.codec;
 
 import com.cw.im.common.protocol.IMMessage;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToByteEncoder;
 import lombok.extern.slf4j.Slf4j;
-import tools.jackson.databind.ObjectMapper;
 
 /**
  * IM 消息编码器

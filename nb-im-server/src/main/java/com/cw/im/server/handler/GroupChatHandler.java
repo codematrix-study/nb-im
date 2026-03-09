@@ -1,0 +1,233 @@
+package com.cw.im.server.handler;
+
+import com.cw.im.common.constants.KafkaTopics;
+import com.cw.im.common.protocol.CommandType;
+import com.cw.im.common.protocol.IMMessage;
+import com.cw.im.core.MessageDeduplicator;
+import com.cw.im.kafka.KafkaProducerManager;
+import com.cw.im.server.attributes.ChannelAttributes;
+import com.cw.im.server.channel.ChannelManager;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.netty.channel.ChannelHandlerContext;
+import lombok.extern.slf4j.Slf4j;
+
+/**
+ * 群聊消息处理器
+ *
+ * <p>专门处理群聊消息的Handler，实现完整的群聊消息流程</p>
+ *
+ * <h3>群聊消息流程</h3>
+ * <pre>
+ * 发送流程:
+ * 1. 客户端发送群聊消息
+ * 2. Gateway接收消息
+ * 3. GroupChatHandler处理消息
+ * 4. 检查消息是否重复
+ * 5. 发送到Kafka（im-msg-send，使用groupId作为分区key）
+ * 6. 返回ACK给发送者
+ *
+ * 投递流程（业务层处理）:
+ * 1. 业务系统消费Kafka消息
+ * 2. 业务系统获取群组成员列表
+ * 3. 业务系统为每个成员生成推送消息
+ * 4. 业务系统发送到Kafka（im-msg-push）
+ * 5. Gateway消费推送消息
+ * 6. GroupMessagePushConsumer推送给在线成员
+ * </pre>
+ *
+ * @author cw
+ * @since 1.0.0
+ */
+@Slf4j
+public class GroupChatHandler {
+
+    private final ChannelManager channelManager;
+    private final KafkaProducerManager kafkaProducer;
+    private final MessageDeduplicator messageDeduplicator;
+    private final ObjectMapper objectMapper;
+    private final String gatewayId;
+
+    /**
+     * 发送统计
+     */
+    private long totalSentCount = 0;
+    private long kafkaSentCount = 0;
+    private long sendFailedCount = 0;
+
+    /**
+     * 构造函数
+     *
+     * @param channelManager         Channel管理器
+     * @param kafkaProducer          Kafka生产者
+     * @param messageDeduplicator    消息去重器
+     */
+    public GroupChatHandler(ChannelManager channelManager,
+                            KafkaProducerManager kafkaProducer,
+                            MessageDeduplicator messageDeduplicator) {
+        this.channelManager = channelManager;
+        this.kafkaProducer = kafkaProducer;
+        this.messageDeduplicator = messageDeduplicator;
+        this.objectMapper = new ObjectMapper();
+        this.gatewayId = channelManager.getGatewayId();
+        log.info("GroupChatHandler 初始化完成");
+    }
+
+    /**
+     * 处理群聊消息
+     *
+     * @param ctx ChannelHandlerContext
+     * @param msg IM消息
+     */
+    public void handle(ChannelHandlerContext ctx, IMMessage msg) {
+        totalSentCount++;
+
+        Long fromUserId = msg.getFrom();
+        Long groupId = msg.getTo();
+        String msgId = msg.getMsgId();
+
+        try {
+            log.info("处理群聊消息: msgId={}, from={}, groupId={}, content={}",
+                    msgId, fromUserId, groupId, msg.getContent());
+
+            // 1. 检查消息是否重复
+            if (messageDeduplicator.isProcessed(msgId)) {
+                log.warn("群聊消息重复，跳过处理: msgId={}", msgId);
+                sendAck(ctx, msgId, true, "消息重复（已处理）");
+                return;
+            }
+
+            // 2. 验证消息格式
+            if (!validateMessage(msg)) {
+                log.warn("群聊消息格式无效: msgId={}", msgId);
+                sendAck(ctx, msgId, false, "消息格式无效");
+                sendFailedCount++;
+                return;
+            }
+
+            // 3. 发送到Kafka（使用groupId作为分区key，保证同一群组消息顺序）
+            sendToKafka(msg, groupId);
+
+            // 4. 返回ACK给发送者
+            sendAck(ctx, msgId, true, "群聊消息已接收");
+
+            kafkaSentCount++;
+            log.debug("群聊消息处理完成: msgId={}, groupId={}", msgId, groupId);
+
+        } catch (Exception e) {
+            log.error("处理群聊消息失败: msgId={}, groupId={}", msgId, groupId, e);
+            sendAck(ctx, msgId, false, "处理失败: " + e.getMessage());
+            sendFailedCount++;
+        }
+    }
+
+    /**
+     * 发送消息到Kafka
+     *
+     * @param msg     IM消息
+     * @param groupId 群组ID
+     */
+    private void sendToKafka(IMMessage msg, Long groupId) {
+        try {
+            // 1. 序列化消息为JSON
+            String json = objectMapper.writeValueAsString(msg);
+
+            // 2. 使用groupId作为分区key
+            // 保证同一群组的消息进入同一分区，保证消息顺序性
+            String partitionKey = String.valueOf(groupId);
+
+            // 3. 异步发送到Kafka
+            kafkaProducer.sendAsync(KafkaTopics.MSG_SEND, partitionKey, json, null);
+
+            log.debug("群聊消息发送到Kafka: msgId={}, groupId={}, partitionKey={}",
+                    msg.getMsgId(), groupId, partitionKey);
+
+        } catch (Exception e) {
+            log.error("发送群聊消息到Kafka失败: msgId={}, groupId={}",
+                    msg.getMsgId(), groupId, e);
+            throw new RuntimeException("发送到Kafka失败", e);
+        }
+    }
+
+    /**
+     * 验证消息格式
+     *
+     * @param msg IM消息
+     * @return true-有效, false-无效
+     */
+    private boolean validateMessage(IMMessage msg) {
+        return msg.isValid()
+                && msg.getCmd() == CommandType.GROUP_CHAT
+                && msg.getContent() != null
+                && !msg.getContent().trim().isEmpty()
+                && msg.getTo() != null
+                && msg.getTo() > 0; // groupId必须有效
+    }
+
+    /**
+     * 发送ACK响应
+     *
+     * @param ctx     ChannelHandlerContext
+     * @param msgId   原始消息ID
+     * @param success 是否成功
+     * @param reason  原因
+     */
+    private void sendAck(ChannelHandlerContext ctx, String msgId, boolean success, String reason) {
+        try {
+            Long userId = ChannelAttributes.getUserId(ctx.channel());
+
+            IMMessage ackMessage = IMMessage.builder()
+                    .header(com.cw.im.common.model.MessageHeader.builder()
+                            .msgId(java.util.UUID.randomUUID().toString())
+                            .cmd(CommandType.ACK)
+                            .from(0L)  // 系统消息
+                            .to(userId != null ? userId : 0L)
+                            .timestamp(System.currentTimeMillis())
+                            .version("1.0")
+                            .build())
+                    .body(com.cw.im.common.model.MessageBody.builder()
+                            .content(success ? "ACK: " + msgId : "NACK: " + msgId)
+                            .contentType("ack")
+                            .extras(java.util.Map.of(
+                                    "msgId", msgId,
+                                    "success", success,
+                                    "reason", reason != null ? reason : "",
+                                    "gatewayId", gatewayId
+                            ))
+                            .build())
+                    .build();
+
+            ctx.writeAndFlush(ackMessage);
+            log.debug("发送ACK: msgId={}, success={}, reason={}", msgId, success, reason);
+
+        } catch (Exception e) {
+            log.error("发送ACK失败: msgId={}", msgId, e);
+        }
+    }
+
+    // ==================== 统计方法 ====================
+
+    /**
+     * 获取统计信息
+     *
+     * @return 统计信息字符串
+     */
+    public String getStats() {
+        double successRate = totalSentCount > 0 ? (double) kafkaSentCount / totalSentCount * 100 : 0;
+        double failureRate = totalSentCount > 0 ? (double) sendFailedCount / totalSentCount * 100 : 0;
+
+        return String.format(
+                "GroupChatHandler{totalSent=%d, kafkaSent=%d(%.2f%%), failed=%d(%.2f%%)}",
+                totalSentCount, kafkaSentCount, successRate, sendFailedCount, failureRate
+        );
+    }
+
+    /**
+     * 重置统计信息
+     */
+    public void resetStats() {
+        totalSentCount = 0;
+        kafkaSentCount = 0;
+        sendFailedCount = 0;
+        log.info("群聊消息统计信息已重置");
+    }
+}

@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: nb-im-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    networks:
+      - nb-im-network
+    restart: unless-stopped
+
+  # Zookeeper (Kafka 依赖)
+  zookeeper:
+    image: bitnami/zookeeper:latest
+    container_name: nb-im-zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+    networks:
+      - nb-im-network
+    restart: unless-stopped
+
+  # Kafka
+  kafka:
+    image: bitnami/kafka:latest
+    container_name: nb-im-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://localhost:9092
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+      - ALLOW_PLAINTEXT_LISTENER=yes
+    depends_on:
+      - zookeeper
+    networks:
+      - nb-im-network
+    restart: unless-stopped
+
+  # NB-IM Gateway (可选)
+  nb-im:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: nb-im-gateway
+    ports:
+      - "8080:8080"  # IM 服务端口
+      - "8081:8081"  # 管理 API 端口
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - KAFKA_SERVERS=kafka:9092
+      - SERVER_PORT=8080
+      - ADMIN_API_PORT=8081
+    depends_on:
+      - redis
+      - kafka
+    networks:
+      - nb-im-network
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+    driver: local
+
+networks:
+  nb-im-network:
+    driver: bridge
