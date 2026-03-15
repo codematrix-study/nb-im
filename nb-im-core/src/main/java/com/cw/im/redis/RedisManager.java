@@ -28,7 +28,7 @@ public class RedisManager {
         System.setProperty("io.netty.noNative", "true");
     }
 
-    private static final String DEFAULT_HOST = "192.168.215.3";
+    private static final String DEFAULT_HOST = "192.168.1.48";
     private static final int DEFAULT_PORT = 6379;
     private static final String DEFAULT_PASSWORD = null;
     private static final int DEFAULT_DATABASE = 0;

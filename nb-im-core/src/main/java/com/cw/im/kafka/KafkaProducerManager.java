@@ -37,7 +37,7 @@ import java.util.concurrent.Future;
 @Slf4j
 public class KafkaProducerManager {
 
-    private static final String DEFAULT_BOOTSTRAP_SERVERS = "192.168.215.2:9092";
+    private static final String DEFAULT_BOOTSTRAP_SERVERS = "192.168.1.48:9092";
     private static final String DEFAULT_ACKS = "1";
     private static final int DEFAULT_RETRIES = 3;
     private static final int DEFAULT_BATCH_SIZE = 16384; // 16KB

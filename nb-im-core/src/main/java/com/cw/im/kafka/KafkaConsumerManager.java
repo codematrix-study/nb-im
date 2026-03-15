@@ -41,7 +41,7 @@ import java.util.function.Predicate;
 @Slf4j
 public class KafkaConsumerManager {
 
-    private static final String DEFAULT_BOOTSTRAP_SERVERS = "192.168.215.2:9092";
+    private static final String DEFAULT_BOOTSTRAP_SERVERS = "192.168.1.48:9092";
     private static final String DEFAULT_GROUP_ID = "im-gateway-group";
     private static final String DEFAULT_AUTO_OFFSET_RESET = "earliest";
     private static final int DEFAULT_MAX_POLL_RECORDS = 500;
